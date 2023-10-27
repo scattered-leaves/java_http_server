@@ -3,6 +3,9 @@ package top.scalea.java_http_server;
 import com.sun.net.httpserver.HttpContext;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
+import org.apache.commons.collections4.MultiValuedMap;
+import org.apache.commons.collections4.multimap.AbstractListValuedMap;
+import org.apache.commons.collections4.multimap.ArrayListValuedHashMap;
 
 import java.io.IOException;
 import java.io.PrintStream;
@@ -12,27 +15,11 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 
 public class HttpServer extends com.sun.net.httpserver.HttpServer {
-    private static final byte[] on404 = "<h1>404 Not Found</h1>No context found for request".getBytes();
-    public Map<Integer , Map<String , byte[]>> deferror = new ConcurrentHashMap<>();
-
-    {
-        for (Integer s : deferrors.keySet()) {
-            deferror.put(s, new ConcurrentHashMap<>(deferrors.get(s)));
-        }
-    }
-    private static final Map<Integer , Map<String , byte[]>> deferrors = new HashMap<>();
-    static {
-        Map<String, byte[]> temp = new HashMap<>();
-        temp.put("en-US", "<h1>404 Not Found</h1>No context found for request".getBytes());
-        temp.put("zh-CN", "<h1>404 未找到</h1>未找到请求的上下文".getBytes());
-        deferrors.put(404, temp);
-
-    }
-    private final PrintStream err;
+    public final HSInfo hsinfo;
     private final com.sun.net.httpserver.HttpServer hs;
-    private final Map<String , List<HttpHandler>> only = new ConcurrentHashMap<>();
+    private final AbstractListValuedMap<String , HttpHandler> only = new ArrayListValuedHashMap<>();
     //private final Map<String , List<HttpHandler>> wildcard = new ConcurrentHashMap<>();
-    private final Map<String , List<HttpHandler>> regexp = new ConcurrentHashMap<>();
+    private final AbstractListValuedMap<String , HttpHandler> regexp = new ArrayListValuedHashMap<>();
 
     public HttpServer() throws IOException {
         this(null, 0);
@@ -42,7 +29,7 @@ public class HttpServer extends com.sun.net.httpserver.HttpServer {
     }
 
     public HttpServer(InetSocketAddress addr, int backlog, PrintStream err) throws IOException {
-        this.err = err;
+        hsinfo = new HSInfo(err);
         hs = com.sun.net.httpserver.HttpServer.create(addr, backlog);
         hs.createContext("/", new he(this));
     }
@@ -81,26 +68,26 @@ public class HttpServer extends com.sun.net.httpserver.HttpServer {
                         try {
                             xh.handle(exchange);
                         } catch (Exception e) {
-                            e.printStackTrace(hsr.err);
+                            e.printStackTrace(hsr.hsinfo.err);
                         }
                     }
                 }
                 String[] rel = hsr.regexp.keySet().toArray(new String[0]);
-                List<HttpHandler>[] rev = hsr.regexp.values().toArray(new List[0]);
+                HttpHandler[] rev = hsr.regexp.values().toArray(new HttpHandler[0]);
                 for (int i = 0; i < rel.length; i++) {
                     try {
                         if (path.matches(rel[i])) {
-                            for (HttpHandler xh : rev[i]) {
+                            for (HttpHandler xh : rev) {
                                 in404 = false;
                                 try {
                                     xh.handle(exchange);
                                 } catch (Exception e) {
-                                    e.printStackTrace(hsr.err);
+                                    e.printStackTrace(hsr.hsinfo.err);
                                 }
                             }
                         }
                     } catch (Exception e) {
-                        e.printStackTrace(hsr.err);
+                        e.printStackTrace(hsr.hsinfo.err);
                     }
                 }
                 if (in404) {
@@ -108,7 +95,7 @@ public class HttpServer extends com.sun.net.httpserver.HttpServer {
                     List<String> ls = exchange.getRequestHeaders().get("Accept-Language");
                     String l = "en-US";
                     if (ls != null && !ls.isEmpty()) l = ls.get(0).split(",")[0];
-                    Map<String , byte[]> temp = hsr.deferror != null ? hsr.deferror.get(404) : null;
+                    Map<String , byte[]> temp = hsr.hsinfo.deferror != null ? hsr.hsinfo.deferror.get(404) : null;
                     byte[] date = temp != null ? temp.get(l) : new byte[0];
                     exchange.sendResponseHeaders(404, date.length);
                     exchange.getResponseBody().write(date);
@@ -116,8 +103,10 @@ public class HttpServer extends com.sun.net.httpserver.HttpServer {
                 }
             }catch (Exception e)
             {
-                e.printStackTrace(hsr.err);
+                e.printStackTrace(hsr.hsinfo.err);
                 exchange.sendResponseHeaders(500,0);
+            }finally {
+                exchange.close();
             }
         }
         he(HttpServer hse)
@@ -229,6 +218,12 @@ public class HttpServer extends com.sun.net.httpserver.HttpServer {
         return createContext(path, handler, Type.ONLY);
     }
     public HttpContext createContext(String path, HttpHandler handler, Type type) {
+        switch (type){
+            case ONLY :
+                only.put(path, handler);
+            case REGEXP:
+                regexp.put(path, handler);
+        }
         return null;
     }
 

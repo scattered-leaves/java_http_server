@@ -6,13 +6,34 @@
 
     <groupId>top.scalea</groupId>
     <artifactId>java_http_server</artifactId>
-    <version>1</version>
+    <version>1.1.0</version>
 
     <properties>
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
+    <repositories>
+        <repository>
+            <id>mspongepowered</id>
+            <name>spongepowered</name>
+            <url>http://127.0.0.1:114/maven</url>
+        </repository>
+        <repository>
+            <id>def</id>
+            <name>def</name>
+            <url>https://repo1.maven.org/maven2</url>
+        </repository>
+        <repository>
+            <id>github</id>
+            <url>https://maven.pkg.github.com/</url>
+            <snapshots>
+                <enabled>true</enabled>
+            </snapshots>
+        </repository>
+
+
+    </repositories>
 
     <developers>
         <developer>
@@ -21,4 +42,19 @@
             <timezone>+8</timezone>
         </developer>
     </developers>
+    <distributionManagement>
+        <repository>
+            <id>github</id>
+            <name>GitHub OWNER Apache Maven Packages</name>
+            <url>https://maven.pkg.github.com/scattered-leaves/java_http_server</url>
+        </repository>
+    </distributionManagement>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-collections4</artifactId>
+            <version>4.4</version>
+        </dependency>
+    </dependencies>
 </project>
