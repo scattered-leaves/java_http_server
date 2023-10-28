@@ -3,41 +3,133 @@ package top.scalea.java_http_server;
 import com.sun.net.httpserver.HttpContext;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
-import org.apache.commons.collections4.MultiValuedMap;
+import com.sun.net.httpserver.HttpsConfigurator;
 import org.apache.commons.collections4.multimap.AbstractListValuedMap;
 import org.apache.commons.collections4.multimap.ArrayListValuedHashMap;
 
 import java.io.IOException;
 import java.io.PrintStream;
-import java.net.*;
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
+import java.net.BindException;
+import java.net.InetSocketAddress;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Executor;
 
-public class HttpServer extends com.sun.net.httpserver.HttpServer {
+public class HttpsServer extends HttpServer {
     public final HSInfo hsinfo;
-    private final com.sun.net.httpserver.HttpServer hs;
+    private final com.sun.net.httpserver.HttpsServer hss;
     final AbstractListValuedMap<String , HttpHandler> only = new ArrayListValuedHashMap<>();
     //private final Map<String , List<HttpHandler>> wildcard = new ConcurrentHashMap<>();
     final AbstractListValuedMap<String , HttpHandler> regexp = new ArrayListValuedHashMap<>();
 
-    public HttpServer() throws IOException {
+    public HttpsServer() throws IOException {
         this(null, 0);
     }
-    public HttpServer(InetSocketAddress addr, int backlog) throws IOException {
+    public HttpsServer(InetSocketAddress addr, int backlog) throws IOException {
         this(addr, backlog, System.err);
     }
 
-    public HttpServer(InetSocketAddress addr, int backlog, PrintStream err) throws IOException {
+    public HttpsServer(InetSocketAddress addr, int backlog, PrintStream err) throws IOException {
         hsinfo = new HSInfo(err);
-        hs = com.sun.net.httpserver.HttpServer.create(addr, backlog);
-        hs.createContext("/", new handle(this));
+        hss = com.sun.net.httpserver.HttpsServer.create(addr, backlog);
+        hss.createContext("/", new handle(this));
     }
-    public static HttpServer create() throws IOException {
-        return new HttpServer();
+    public static HttpsServer create() throws IOException {
+        return new HttpsServer();
     }
-    public static HttpServer create(InetSocketAddress addr, int backlog) throws IOException {
-        return new HttpServer(addr, backlog);
+    public static HttpsServer create(InetSocketAddress addr, int backlog) throws IOException {
+        return new HttpsServer(addr, backlog);
+    }
+
+    static class handle implements HttpHandler {
+
+        private final HttpsServer hsr;
+        /**
+         * Handle the given request and generate an appropriate response.
+         * See {@link HttpExchange} for a description of the steps
+         * involved in handling an exchange.
+         *
+         * @param exchange the exchange containing the request from the
+         *                 client and used to send the response
+         * @throws NullPointerException if exchange is {@code null}
+         * @throws IOException          if an I/O error occurs
+         */
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            try {
+                boolean in404 = true;
+                String path = exchange.getRequestURI().getPath();
+                if (hsr.only.containsKey(path)) {
+                    List<HttpHandler> h = hsr.only.get(path);
+                    for (HttpHandler xh : h) {
+                        in404 = false;
+                        try {
+                            xh.handle(exchange);
+                        } catch (Exception e) {
+                            e.printStackTrace(hsr.hsinfo.err);
+                        }
+                    }
+                }
+                String[] rel = hsr.regexp.keySet().toArray(new String[0]);
+                HttpHandler[] rev = hsr.regexp.values().toArray(new HttpHandler[0]);
+                for (int i = 0; i < rel.length; i++) {
+                    try {
+                        if (path.matches(rel[i])) {
+                            for (HttpHandler xh : rev) {
+                                in404 = false;
+                                try {
+                                    xh.handle(exchange);
+                                } catch (Exception e) {
+                                    e.printStackTrace(hsr.hsinfo.err);
+                                }
+                            }
+                        }
+                    } catch (Exception e) {
+                        e.printStackTrace(hsr.hsinfo.err);
+                    }
+                }
+                if (in404) {
+                    exchange.getResponseHeaders().add("Content-Type", "text/html; charset=utf-8");
+                    List<String> ls = exchange.getRequestHeaders().get("Accept-Language");
+                    String l = "en-US";
+                    if (ls != null && !ls.isEmpty()) l = ls.get(0).split(",")[0];
+                    Map<String , byte[]> temp = hsr.hsinfo.deferror != null ? hsr.hsinfo.deferror.get(404) : null;
+                    byte[] date = temp != null ? temp.get(l) : new byte[0];
+                    exchange.sendResponseHeaders(404, date.length);
+                    exchange.getResponseBody().write(date);
+                    exchange.close();
+                }
+            }catch (Exception e)
+            {
+                e.printStackTrace(hsr.hsinfo.err);
+                exchange.sendResponseHeaders(500,0);
+            }finally {
+                exchange.close();
+            }
+        }
+        handle(HttpsServer hse)
+        {
+            this.hsr = hse;
+        }
+    }
+    /**
+     * Sets this server's {@link HttpsConfigurator} object.
+     *
+     * @param config the {@code HttpsConfigurator} to set
+     * @throws NullPointerException if config is {@code null}
+     */
+    public void setHttpsConfigurator(HttpsConfigurator config) {
+        hss.setHttpsConfigurator(config);
+    }
+
+    /**
+     * Gets this server's {@link HttpsConfigurator} object, if it has been set.
+     *
+     * @return the {@code HttpsConfigurator} for this server, or {@code null} if
+     * not set
+     */
+    public HttpsConfigurator getHttpsConfigurator() {
+        return hss.getHttpsConfigurator();
     }
 
 
@@ -57,7 +149,7 @@ public class HttpServer extends com.sun.net.httpserver.HttpServer {
      */
     @Override
     public void bind(InetSocketAddress addr, int backlog) throws IOException {
-        hs.bind(addr, backlog);
+        hss.bind(addr, backlog);
     }
 
     /**
@@ -67,7 +159,7 @@ public class HttpServer extends com.sun.net.httpserver.HttpServer {
      */
     @Override
     public void start() {
-        hs.start();
+        hss.start();
     }
 
     /**
@@ -84,7 +176,7 @@ public class HttpServer extends com.sun.net.httpserver.HttpServer {
      */
     @Override
     public void setExecutor(Executor executor) {
-        hs.setExecutor(executor);
+        hss.setExecutor(executor);
     }
 
     /**
@@ -95,7 +187,7 @@ public class HttpServer extends com.sun.net.httpserver.HttpServer {
      */
     @Override
     public Executor getExecutor() {
-        return hs.getExecutor();
+        return hss.getExecutor();
     }
 
     /**
@@ -112,7 +204,7 @@ public class HttpServer extends com.sun.net.httpserver.HttpServer {
      */
     @Override
     public void stop(int delay) {
-        hs.stop(delay);
+        hss.stop(delay);
     }
 
     /**
@@ -220,6 +312,6 @@ public class HttpServer extends com.sun.net.httpserver.HttpServer {
      */
     @Override
     public InetSocketAddress getAddress() {
-        return hs.getAddress();
+        return hss.getAddress();
     }
 }
