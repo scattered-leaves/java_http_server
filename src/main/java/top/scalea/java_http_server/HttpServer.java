@@ -148,8 +148,10 @@ public class HttpServer extends com.sun.net.httpserver.HttpServer {
         switch (type){
             case ONLY :
                 only.put(path, handler);
+                break;
             case REGEXP:
                 regexp.put(path, handler);
+                break;
         }
         return null;
     }
